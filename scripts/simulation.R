@@ -2,8 +2,8 @@ library(pwr)
 library(dplyr)
 library(parallel)
 
-n <- 50000
-ndiscovery <- c(25000, 30000, 35000, 40000, 45000)
+n <- 50000 * 10
+ndiscovery <- c(25000, 30000, 35000, 40000, 45000) * 10
 nreplication <- n - ndiscovery
 maf <- c(0.01, 0.05, 0.2, 0.5)
 

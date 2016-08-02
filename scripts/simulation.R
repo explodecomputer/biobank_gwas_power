@@ -2,8 +2,8 @@ library(pwr)
 library(dplyr)
 library(parallel)
 
-n <- 500000
-ndiscovery <- c(250000, 300000, 350000, 400000, 450000)
+n <- 50000
+ndiscovery <- c(25000, 30000, 35000, 40000, 45000)
 nreplication <- n - ndiscovery
 maf <- c(0.01, 0.05, 0.2, 0.5)
 
@@ -23,24 +23,52 @@ params$replication_power <- NA
 for(i in 1:nrow(params))
 {
 	message(i)
-	params$rsq <- pwr.f2.test(u=1, v=n, sig.level=5e-8, power=params$power[i])$f2
-	params$eff <- params$rsq / (2 * params$maf * (1-params$maf))
-	params$discovery_power[i] <- pwr.f2.test(u=1, v=params$ndiscovery[i], sig.level=params$discovery_threshold[i], f2=params$rsq[i])$power
+	params$fstat[i] <- pwr.f2.test(u=1, v=n, sig.level=5e-8, power=params$power[i])$f2
+	params$rsq[i] <- params$fstat[i] / (1 + params$fstat[i])
+	params$eff[i] <- params$rsq[i] / (2 * params$maf[i] * (1-params$maf[i]))
+	params$discovery_power[i] <- pwr.f2.test(u=1, v=params$ndiscovery[i], sig.level=params$discovery_threshold[i], f2=params$fstat[i])$power
 	params$replication_power[i] <- pwr.f2.test(u=1, v=params$nreplication[i], sig.level=params$replication_threshold[i], f2=params$rsq[i])$power
 }
 
 params$total_power <- params$discovery_power * params$replication_power
 
 
+
 ## Simulations
 # For each row do 10 Simulations
 # Keep the stats, including mean effect size
 
+fastAssoc <- function(y, x)
+{
+	index <- is.finite(y) & is.finite(x)
+	n <- sum(index)
+	y <- y[index]
+	x <- x[index]
+	vx <- var(x)
+	bhat <- cov(y, x) / vx
+	ahat <- mean(y) - bhat * mean(x)
+	# fitted <- ahat + x * bhat
+	# residuals <- y - fitted
+	# SSR <- sum((residuals - mean(residuals))^2)
+	# SSF <- sum((fitted - mean(fitted))^2)
+
+	rsq <- (bhat * vx)^2 / (vx * var(y))
+	fval <- rsq * (n-2) / (1-rsq)
+	tval <- sqrt(fval)
+	se <- abs(bhat / tval)
+
+	# Fval <- (SSF) / (SSR/(n-2))
+	# pval <- pf(Fval, 1, n-2, lowe=F)
+	p <- pf(fval, 1, n-2, lowe=F)
+	return(list(
+		ahat=ahat, bhat=bhat, se=se, fval=fval, pval=p
+	))
+}
 
 do_sim <- function(params, i)
 {
-	g1 <- scale(rbinom(params$ndiscovery[i], 2, params$maf[i]))
-	g2 <- scale(rbinom(params$nreplication[i], 2, params$maf[i]))
+	g1 <- rbinom(params$ndiscovery[i], 2, params$maf[i])
+	g2 <- rbinom(params$nreplication[i], 2, params$maf[i])
 
 	phen1 <- g1 * params$eff[i]
 	ve1 <- var(phen1) / (params$rsq[i]) - var(phen1)
@@ -50,24 +78,28 @@ do_sim <- function(params, i)
 	ve2 <- var(phen2) / (params$rsq[i]) - var(phen2)
 	phen2 <- scale(phen2 + rnorm(params$nreplication[i], 0, sqrt(ve2)))
 
-	mod1 <- summary(lm(phen1 ~ g1))$coefficients
-	mod2 <- summary(lm(phen2 ~ g2))$coefficients
-	mod3 <- summary(lm(c(phen1,phen2) ~ c(g1,g2)))$coefficients
+	# mod1 <- summary(lm(phen1 ~ g1))$coefficients
+	# mod2 <- summary(lm(phen2 ~ g2))$coefficients
+	# mod3 <- summary(lm(c(phen1,phen2) ~ c(g1,g2)))$coefficients
+	mod1 <- fastAssoc(phen1, g1)
+	mod2 <- fastAssoc(phen2, g2)
+	mod3 <- fastAssoc(c(phen1,phen2), c(g1,g2))
 
 	return(as.data.frame(list(
-		eff_discovery = mod1[2,1],
-		se_discovery = mod1[2,2],
-		p_discovery = mod1[2,4],
-		eff_replication = mod2[2,1],
-		se_replication = mod2[2,2],
-		p_replication = mod2[2,4],
-		significant = mod1[2,4] < params$discovery_threshold[i] & mod2[2,4] < params$replication_threshold[i],
-		eff_total = mod3[2,1],
-		se_total = mod3[2,2],
-		p_total = mod3[2,4],
-		significant_t = mod3[2,4] < 5e-8
+		eff_discovery = mod1$bhat,
+		se_discovery = mod1$se,
+		p_discovery = mod1$pval,
+		eff_replication = mod2$bhat,
+		se_replication = mod2$se,
+		p_replication = mod2$pval,
+		significant = mod1$pval < params$discovery_threshold[i] & mod2$pval < params$replication_threshold[i],
+		eff_total = mod3$bhat,
+		se_total = mod3$se,
+		p_total = mod3$pval,
+		significant_t = mod3$pval < 5e-8
 	)))
 }
+
 
 do_sim_multi <- function(params, i, nsim)
 {
@@ -90,7 +122,9 @@ do_sim_multi <- function(params, i, nsim)
 	return(params[i,])
 }
 
-do_sim_multi(params, 60, 5)
+# do_sim_multi(params, 1, 20)
+# do_sim_multi(params, 9, 20)
+
 
 do_sim_multi_parallel <- function(params, nsim, ncores)
 {
@@ -104,4 +138,25 @@ do_sim_multi_parallel <- function(params, nsim, ncores)
 params <- do_sim_multi_parallel(params, 100, 16)
 
 save(params, file="../results/simulations.RData")
+
+
+
+# N <- 105000
+# fstat <- pwr.f2.test(u=1, v=N, sig=5e-8, power=0.75)$f2
+
+# res <- array(0,100)
+# res2 <- array(0,100)
+# for(i in 1:100)
+# {
+# 	message(i)
+# 	rsq <- fstat / (1 + fstat)
+# 	x <- rnorm(N)
+# 	ve <- (var(x) - rsq * var(x)) / rsq
+# 	y <- x + rnorm(N, sd=sqrt(ve))
+# 	res[i] <- fastAssoc(y,x)$pval < 5e-8
+# 	res2[i] <- cor(y,x)^2
+# }
+# table(res)
+# mean(res2)
+# rsq
 

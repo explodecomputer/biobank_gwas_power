@@ -148,8 +148,10 @@ do_sim_multi <- function(params, i, nsim)
 {
 	params$eff_discovery <- NA
 	params$eff_replication <- NA
+	params$eff_replication_sig <- NA
 	params$simulation_power <- NA
 	params$eff_total <- NA
+	params$eff_total_sig <- NA
 	params$simulation_power_t <- NA
 	l <- list()
 	for(j in 1:nsim)
@@ -159,8 +161,10 @@ do_sim_multi <- function(params, i, nsim)
 	l <- bind_rows(l)
 	params$eff_discovery[i] <- mean(l$eff_discovery)
 	params$eff_replication[i] <- mean(l$eff_replication)
+	params$eff_replication_sig[i] <- mean(l$eff_replication[l$significant])
 	params$simulation_power[i] <- sum(l$significant) / nrow(l)
 	params$eff_total <- mean(l$eff_total)
+	params$eff_total_sig <- mean(l$eff_total[l$significant_t])
 	params$simulation_power_t <- sum(l$significant_t) / nrow(l)
 	return(params[i,])
 }

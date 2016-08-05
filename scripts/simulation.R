@@ -7,9 +7,22 @@ ndiscovery <- c(25000, 30000, 35000, 40000, 45000) * 10
 nreplication <- n - ndiscovery
 maf <- c(0.01, 0.05, 0.2, 0.5)
 
+f <- seq(1e-5, 1.5e-4, 1e-6)
+p <- as.vector(array(0, length(f)))
+for(i in 1:length(f))
+{
+	p[i] <- pwr.f2.test(u=1,v=n, sig.level=5e-8, f2=f[i])$power
+}
+dat <- data.frame(p=p, f=f)
+rm(p,f)
+mod <- npreg(f ~ p,  regtype = "ll", bwmethod = "cv.aic", gradients = TRUE, data=dat)
+newdat <- data.frame(p=c(0.25, 0.5, 0.75, 0.99))
+fstat <- predict(mod, newdata = newdat)
+
+
 params <- expand.grid(
 	maf=maf,
-	power=c(0.25, 0.5, 0.75, 0.99),
+	fstat=fstat,
 	ndiscovery=ndiscovery,
 	discovery_threshold=c(5e-5, 5e-6, 5e-7, 5e-8)
 )
@@ -23,14 +36,43 @@ params$replication_power <- NA
 for(i in 1:nrow(params))
 {
 	message(i)
-	params$fstat[i] <- pwr.f2.test(u=1, v=n, sig.level=5e-8, power=params$power[i])$f2
+	# params$fstat[i] <- pwr.f2.test(u=1, v=n, sig.level=5e-8, power=params$power[i])$f2
 	params$rsq[i] <- params$fstat[i] / (1 + params$fstat[i])
 	params$eff[i] <- params$rsq[i] / (2 * params$maf[i] * (1-params$maf[i]))
 	params$discovery_power[i] <- pwr.f2.test(u=1, v=params$ndiscovery[i], sig.level=params$discovery_threshold[i], f2=params$fstat[i])$power
 	params$replication_power[i] <- pwr.f2.test(u=1, v=params$nreplication[i], sig.level=params$replication_threshold[i], f2=params$rsq[i])$power
+	params$power[i] <- pwr.f2.test(u=1, v=n, sig.level=5e-8, f2=params$rsq[i])$power
 }
 
 params$total_power <- params$discovery_power * params$replication_power
+
+
+# testsim <- function(n, f, maf)
+# {
+# 	rsq <- f / (1 + f)
+# 	eff <- rsq / (2 * maf * (1-maf))
+# 	g <- rbinom(n, 2, maf)
+# 	phen <- g * eff
+# 	ve <- var(phen) / rsq - var(phen)
+# 	phen <- scale(phen + rnorm(n, 0, sqrt(ve)))
+# 	return(fastAssoc(phen, g)$pval < 5e-8)
+# }
+
+
+# nsim <- 100
+# n <- 500000
+# attempted_power <- 0.25
+# f <- mod[1] + mod[2] * attempted_power
+# f2 <- pwr.f2.test(u=1, v=n, sig.level=5e-8, power=f)$f2
+
+# res <- array(0, nsim)
+# for(i in 1:nsim)
+# {
+# 	message(i)
+# 	res[i] <- testsim(n, f, 0.5)
+# }
+# sum(res) / length(res)
+# pwr.f2.test(u=1,v=n, sig.level=5e-8, f2=f)
 
 
 

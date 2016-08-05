@@ -21,12 +21,31 @@ load("../results/simulations.RData")
 
 ```
 
+All code to run these analyses are here: [https://github.com/explodecomputer/biobank_gwas_power](https://github.com/explodecomputer/biobank_gwas_power)
+
+
 ## Objective
 
 - Test the difference in power if we split 500k Biobank samples into discovery and replication sets
 - Test the difference in bias for detected signals
 
 Calculating power for sample sizes of 500000 and significance thresholds of 5e-8 leads to numerical instability using standard packages, so these simulations are based on an approximation for estimating the effect sizes for specific power levels, and then Monte Carlo simulations to check they make sense.
+
+**NOTE:** These simulations assume a real effect. An obvious utility of having discovery and replication samples is to improve robustness, but that is not being assessed here.
+
+
+### One stage approach
+
+Perform GWAS using all 500k samples using a threshold of 5e-8.
+
+
+### Two stage approach
+
+1. The data is split into discovery and replication sets
+2. GWAS is performed in discovery. Some threshold is applied to identify SNPs to take forward to the replication data
+3. Test for replication of the signals. Correct for multiple testing, e.g. if the discovery threshold was 5e-5, and there are 1 million independent regions in the genome, assume that 50 false positives would be identified, so a replication threshold of 0.05 / 50 = 0.001.
+4. To be significant, the SNP has to pass the thresholds in both (2) and (3).
+
 
 ## Theoretical results
 
@@ -35,8 +54,6 @@ Calculating power for sample sizes of 500000 and significance thresholds of 5e-8
 - The effect size can be simulated such that for a full 500k sample the power is 0.25, 0.5, 0.75, 0.99
 
 Given this range of effect sizes, how do different sample splits and discovery thresholds measure up against just doing a single GWAS using all 500k samples?
-
-In order for a 
 
 This graph just show the power for the split sample approach:
 
@@ -52,7 +69,8 @@ geom_point(aes(colour=power)) +
 facet_grid(. ~ discovery_threshold) +
 labs(x="Discovery sample size (x1000)", y="Power to detect", colour="Simulated\npower for\nn=500000") +
 theme_bw() +
-scale_colour_brewer(type="seq", palette = 2)
+theme(axis.text.x=element_text(angle=90, vjust=0.5)) +
+scale_colour_manual(values=c("#fdcc8a", "#fc8d59", "#e34a33", "#b30000"))
 
 ```
 
@@ -70,13 +88,14 @@ geom_point(aes(colour=power)) +
 facet_grid(. ~ discovery_threshold) +
 labs(x="Discovery sample size (x1000)", y="Change in power compared to using 500k discovery", colour="Simulated\npower for\nn=500000") +
 theme_bw() +
-scale_colour_brewer(type="seq", palette = 2)
+theme(axis.text.x=element_text(angle=90, vjust=0.5)) +
+scale_colour_manual(values=c("#fdcc8a", "#fc8d59", "#e34a33", "#b30000"))
 
 ```
 
 ### Summary
 
-It is clear that doing the full 500k GWAS without splitting will be more powerful in all scenarios. But if we were to split the data then something like 350k discovery vs 150k replication, with a discovery threshold of 5e-6 would be the most powerful approach for a range of effect sizes.
+It is clear that doing the full 500k GWAS without splitting will be more powerful in all scenarios. If we were to split the data then something like 350k discovery vs 150k replication, with a discovery threshold of 5e-6 would be the most powerful approach for a range of effect sizes.
 
 
 
@@ -89,15 +108,17 @@ The same plots are shown below for data that were simulated to the same paramete
 
 plot_dat <- params %>% group_by(ndiscovery, power, discovery_threshold) %>%
 	dplyr::summarise(simulation_power=mean(simulation_power), simulation_power_t=mean(simulation_power_t))
-plot_dat$power <- as.factor(plot_dat$power)
+plot_dat$power <- as.factor(round(plot_dat$power, 2))
 plot_dat$ndiscovery <- plot_dat$ndiscovery / 1000
 
 ggplot(plot_dat, aes(x=ndiscovery, y=simulation_power, group=power)) +
 geom_line(aes(colour=power)) +
 geom_point(aes(colour=power)) +
 facet_grid(. ~ discovery_threshold) +
-theme_minimal() +
-labs(x="Discovery sample size (x1000)", y="Power to detect", colour="Simulated\npower for\nn=500000")
+labs(x="Discovery sample size (x1000)", y="Power to detect", colour="Simulated\npower for\nn=500000") +
+theme_bw() +
+theme(axis.text.x=element_text(angle=90, vjust=0.5)) +
+scale_colour_manual(values=c("#fdcc8a", "#fc8d59", "#e34a33", "#b30000"))
 
 ```
 
@@ -108,7 +129,7 @@ labs(x="Discovery sample size (x1000)", y="Power to detect", colour="Simulated\n
 plot_dat <- params %>% group_by(ndiscovery, power, discovery_threshold) %>%
 	dplyr::summarise(simulation_power=mean(simulation_power), simulation_power_t=mean(simulation_power_t))
 plot_dat$power_change <- plot_dat$simulation_power - plot_dat$simulation_power_t
-plot_dat$power <- as.factor(plot_dat$power)
+plot_dat$power <- as.factor(round(plot_dat$power, 2))
 plot_dat$ndiscovery <- plot_dat$ndiscovery / 1000
 
 p <- plot_dat %>% group_by(power) %>% summarise(m=mean(simulation_power_t))
@@ -117,24 +138,36 @@ ggplot(plot_dat, aes(x=ndiscovery, y=power_change, group=power)) +
 geom_line(aes(colour=power)) +
 geom_point(aes(colour=power)) +
 facet_grid(. ~ discovery_threshold) +
-labs(x="Discovery sample size (x1000)", y="Change in power compared to using 500k discovery", colour="Simulated\npower for\nn=500000")
+labs(x="Discovery sample size (x1000)", y="Change in power compared to using 500k discovery", colour="Simulated\npower for\nn=500000") +
+theme_bw() +
+theme(axis.text.x=element_text(angle=90, vjust=0.5)) +
+scale_colour_manual(values=c("#fdcc8a", "#fc8d59", "#e34a33", "#b30000"))
 
 ```
 
 
 ## Bias in effect sizes
 
-Winner's curse applies to GWAS, and is higher when power is lower. But having a replication dataset might alleviate this problem
+Winner's curse applies to GWAS, and is higher when power is lower. A very large effect that is not close to the significance threshold will not be influenced by winner's curse, but SNPs that are hovering around the threshold are much more likely to be overestimated effect sizes. Having a replication dataset might alleviate this problem...
 
+Using the simulation data, calculated 
+
+- the true simulated effect
+- the one stage effect size - **just the effect size for SNPs that were significant**
+- the two stage effect size - the effect size obtained from the replication sample **if the SNP was significant in the discovery and the replication**
+
+Results:
+
+```{r fig.height=6}
 plot_dat <- params %>% group_by(power, discovery_threshold) %>%
 	dplyr::summarise(
 		True=mean(eff_replication),
-		TwoStep=mean(eff_replication_sig),
-		OneStep=mean(eff_total_sig)
+		TwoStage=mean(eff_replication_sig),
+		OneStage=mean(eff_total_sig)
 	) %>% as.data.frame()
 
 
-pd <- melt(plot_dat, measure.vars=c("True", "TwoStep", "OneStep"))
+pd <- melt(plot_dat, measure.vars=c("True", "TwoStage", "OneStage"))
 pd$power <- as.factor(round(pd$power,2))
 
 ggplot(pd, aes(x=power,y=value)) +
@@ -142,3 +175,15 @@ geom_bar(stat="identity", aes(fill=variable), position="dodge") +
 facet_grid(discovery_threshold ~ .) +
 scale_fill_brewer(type="qual") +
 labs(x="Simulated power for n=500000", y="Mean effect size", x="Method")
+
+```
+
+Note that in almost all cases the One stage and Two stage approaches both bias the discovered effects upwards. However, in all cases the bias in the Two stage approach is higher. When power is high there is basically no winner's curse for the One stage approach.
+
+### Summary
+
+Winner's curse is a greater issue in the two stage approach than the one stage approach, probably because:
+
+- power is lower
+- there is still some thresholding being applied
+

@@ -55,7 +55,7 @@ Perform GWAS using all 500k samples using a threshold of 5e-8.
 
 Given this range of effect sizes, how do different sample splits and discovery thresholds measure up against just doing a single GWAS using all 500k samples?
 
-This graph just show the power for the split sample approach:
+This graph just show the power for the split sample approach - columns of graphs are for different discovery thresholds
 
 ```{r }
 
@@ -74,7 +74,7 @@ scale_colour_manual(values=c("#fdcc8a", "#fc8d59", "#e34a33", "#b30000"))
 
 ```
 
-Compared against what the power for just doing a 500k sample:
+Compared against what the power for just doing a 500k sample  - columns of graphs are for different discovery thresholds
 
 ```{r }
 plot_dat <- subset(params, maf==0.5)
@@ -156,29 +156,34 @@ Using the simulation data, calculated
 - the one stage effect size - **just the effect size for SNPs that were significant**
 - the two stage effect size - the effect size obtained from the replication sample **if the SNP was significant in the discovery and the replication**
 
-Results:
+Results - columns of graphs are for different discovery sample sizes, e.g. from 250k discovery 250k replication to 450k discovery 50k replication. Rows of boxes are for different discovery thresholds.
 
 ```{r fig.height=6}
-plot_dat <- params %>% group_by(power, discovery_threshold) %>%
+plot_dat <- params %>% group_by(power, discovery_threshold, ndiscovery) %>%
 	dplyr::summarise(
-		True=mean(eff_replication),
-		TwoStage=mean(eff_replication_sig),
-		OneStage=mean(eff_total_sig)
+		TwoStageSig=(mean(eff_replication_sig) - mean(eff_replication)) / mean(eff_replication) * 100,
+		OneStageSig=(mean(eff_total_sig) - mean(eff_replication)) / mean(eff_replication) * 100
 	) %>% as.data.frame()
 
 
-pd <- melt(plot_dat, measure.vars=c("True", "TwoStage", "OneStage"))
+pd <- melt(plot_dat, measure.vars=c("TwoStageSig", "OneStageSig"))
 pd$power <- as.factor(round(pd$power,2))
 
 ggplot(pd, aes(x=power,y=value)) +
-geom_bar(stat="identity", aes(fill=variable), position="dodge") +
-facet_grid(discovery_threshold ~ .) +
-scale_fill_brewer(type="qual") +
-labs(x="Simulated power for n=500000", y="Mean effect size", x="Method")
+geom_point(aes(colour=variable)) +
+geom_line(aes(colour=variable, group=variable)) +
+facet_grid(discovery_threshold ~ ndiscovery) +
+scale_colour_brewer(type="qual") +
+labs(x="Simulated power for n=500000", y="Mean percentage change from true effect size", x="Method")
 
 ```
 
-Note that in almost all cases the One stage and Two stage approaches both bias the discovered effects upwards. However, in all cases the bias in the Two stage approach is higher. When power is high there is basically no winner's curse for the One stage approach.
+Note that in almost all cases where power is below 0.99 there is bias for each method. Having a small replication sample is a problem for TwoStages.
+
+The only way to avoid bias is to have a TwoStage design where the discovery and replication sizes are each 250k, and the discovery threshold is 5e-8. However, this may still incur bias under the case of multiple true positives, because the replication threshold will be higher.
+
+For the case where discovery sample size is 350k (replication 150k), and discovery threshold is 5e-6, the bias is fairly similar between One stage and Two stage approaches. 
+
 
 ### Summary
 
@@ -187,3 +192,6 @@ Winner's curse is a greater issue in the two stage approach than the one stage a
 - power is lower
 - there is still some thresholding being applied
 
+If the replication sample was used to **just estimate the effect size** and not to test for significance in the replication stage then this would not be an issue - we would get no bias in effect size estimation. But this would just lead to substantially reduced effects.
+
+We should probably continue with using the full 500k to do a One stage analysis. For things like MR analysis, we will be suffering from inaccurate estimates if we don't account for winner's curse in the exposure, e.g by re-estimating the effect size in an independent sample.

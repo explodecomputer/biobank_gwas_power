@@ -1,6 +1,7 @@
 library(pwr)
 library(dplyr)
 library(parallel)
+library(np)
 
 n <- 50000 * 10
 ndiscovery <- c(25000, 30000, 35000, 40000, 45000) * 10

@@ -1,5 +1,5 @@
 ---
-title: Split biobank?
+title: Split biobank into discovery and replication?
 author: Gibran Hemani
 date: "`r Sys.Date()`"
 output: 
@@ -11,21 +11,36 @@ suppressPackageStartupMessages(suppressWarnings(library(knitr)))
 opts_chunk$set(warning=FALSE, message=FALSE, echo=FALSE, cache=FALSE)
 ```
 
-```{r }
+```{r warning=FALSE}
 suppressPackageStartupMessages(library(dplyr))
 suppressPackageStartupMessages(library(lubridate))
-
-
-
-library(ggplot2)
-library(ggthemes)
-library(dplyr)
-library(reshape2)
+suppressPackageStartupMessages(library(ggplot2))
+suppressPackageStartupMessages(library(reshape2))
 
 load("../results/simulations.RData")
 
+```
 
-# Theoretical
+## Objective
+
+- Test the difference in power if we split 500k Biobank samples into discovery and replication sets
+- Test the difference in bias for detected signals
+
+Calculating power for sample sizes of 500000 and significance thresholds of 5e-8 leads to numerical instability using standard packages, so these simulations are based on an approximation for estimating the effect sizes for specific power levels, and then Monte Carlo simulations to check they make sense.
+
+## Theoretical results
+
+- The sample split can be e.g. 250k discovery 250k replication, or some other proportions
+- The discovery threshold can be 5e-8 or something more relaxed
+- The effect size can be simulated such that for a full 500k sample the power is 0.25, 0.5, 0.75, 0.99
+
+Given this range of effect sizes, how do different sample splits and discovery thresholds measure up against just doing a single GWAS using all 500k samples?
+
+In order for a 
+
+This graph just show the power for the split sample approach:
+
+```{r }
 
 plot_dat <- subset(params, maf==0.5)
 plot_dat$power <- as.factor(round(plot_dat$power, 2))
@@ -39,8 +54,11 @@ labs(x="Discovery sample size (x1000)", y="Power to detect", colour="Simulated\n
 theme_bw() +
 scale_colour_brewer(type="seq", palette = 2)
 
+```
 
-dev.new()
+Compared against what the power for just doing a 500k sample:
+
+```{r }
 plot_dat <- subset(params, maf==0.5)
 plot_dat$power_change <- plot_dat$total_power - plot_dat$power
 plot_dat$power <- as.factor(round(plot_dat$power, 2))
@@ -54,11 +72,20 @@ labs(x="Discovery sample size (x1000)", y="Change in power compared to using 500
 theme_bw() +
 scale_colour_brewer(type="seq", palette = 2)
 
+```
+
+### Summary
+
+It is clear that doing the full 500k GWAS without splitting will be more powerful in all scenarios. But if we were to split the data then something like 350k discovery vs 150k replication, with a discovery threshold of 5e-6 would be the most powerful approach for a range of effect sizes.
 
 
 
 
-# Simulations
+## Simulation results
+
+The same plots are shown below for data that were simulated to the same parameters:
+
+```{r }
 
 plot_dat <- params %>% group_by(ndiscovery, power, discovery_threshold) %>%
 	dplyr::summarise(simulation_power=mean(simulation_power), simulation_power_t=mean(simulation_power_t))
@@ -72,8 +99,11 @@ facet_grid(. ~ discovery_threshold) +
 theme_minimal() +
 labs(x="Discovery sample size (x1000)", y="Power to detect", colour="Simulated\npower for\nn=500000")
 
+```
 
 
+
+```{r }
 
 plot_dat <- params %>% group_by(ndiscovery, power, discovery_threshold) %>%
 	dplyr::summarise(simulation_power=mean(simulation_power), simulation_power_t=mean(simulation_power_t))
@@ -89,6 +119,12 @@ geom_point(aes(colour=power)) +
 facet_grid(. ~ discovery_threshold) +
 labs(x="Discovery sample size (x1000)", y="Change in power compared to using 500k discovery", colour="Simulated\npower for\nn=500000")
 
+```
+
+
+## Bias in effect sizes
+
+Winner's curse applies to GWAS, and is higher when power is lower. But having a replication dataset might alleviate this problem
 
 plot_dat <- params %>% group_by(power, discovery_threshold) %>%
 	dplyr::summarise(

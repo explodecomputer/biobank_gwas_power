@@ -1,6 +1,26 @@
+---
+title: Split biobank?
+author: Gibran Hemani
+date: "`r Sys.Date()`"
+output: 
+  pdf_document
+---
+
+```{r, echo=FALSE}
+suppressPackageStartupMessages(suppressWarnings(library(knitr)))
+opts_chunk$set(warning=FALSE, message=FALSE, echo=FALSE, cache=FALSE)
+```
+
+```{r }
+suppressPackageStartupMessages(library(dplyr))
+suppressPackageStartupMessages(library(lubridate))
+
+
+
 library(ggplot2)
 library(ggthemes)
 library(dplyr)
+library(reshape2)
 
 load("../results/simulations.RData")
 
@@ -15,7 +35,7 @@ ggplot(plot_dat, aes(x=ndiscovery, y=total_power, group=power)) +
 geom_line(aes(colour=power)) +
 geom_point(aes(colour=power)) +
 facet_grid(. ~ discovery_threshold) +
-labs(x="Discovery sample size (x1000)", y="Power to detect", colour="Simulated\npower for\nn=500000")
+labs(x="Discovery sample size (x1000)", y="Power to detect", colour="Simulated\npower for\nn=500000") +
 theme_bw() +
 scale_colour_brewer(type="seq", palette = 2)
 
@@ -31,7 +51,7 @@ geom_line(aes(colour=power)) +
 geom_point(aes(colour=power)) +
 facet_grid(. ~ discovery_threshold) +
 labs(x="Discovery sample size (x1000)", y="Change in power compared to using 500k discovery", colour="Simulated\npower for\nn=500000") +
-theme_minimal() +
+theme_bw() +
 scale_colour_brewer(type="seq", palette = 2)
 
 
@@ -69,3 +89,20 @@ geom_point(aes(colour=power)) +
 facet_grid(. ~ discovery_threshold) +
 labs(x="Discovery sample size (x1000)", y="Change in power compared to using 500k discovery", colour="Simulated\npower for\nn=500000")
 
+
+plot_dat <- params %>% group_by(power, discovery_threshold) %>%
+	dplyr::summarise(
+		True=mean(eff_replication),
+		TwoStep=mean(eff_replication_sig),
+		OneStep=mean(eff_total_sig)
+	) %>% as.data.frame()
+
+
+pd <- melt(plot_dat, measure.vars=c("True", "TwoStep", "OneStep"))
+pd$power <- as.factor(round(pd$power,2))
+
+ggplot(pd, aes(x=power,y=value)) +
+geom_bar(stat="identity", aes(fill=variable), position="dodge") +
+facet_grid(discovery_threshold ~ .) +
+scale_fill_brewer(type="qual") +
+labs(x="Simulated power for n=500000", y="Mean effect size", x="Method")
